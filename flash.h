@@ -1,10 +1,7 @@
+// code re-written for RP2040 c SDK, origional commands and command defines from:
+// https://www.instructables.com/How-to-Design-with-Discrete-SPI-Flash-Memory/
+
 #include <hardware/spi.h>
-#include <hardware/dma.h>
-#include <SPI.h>
-// SS:   pin 10
-// MOSI: pin 11
-// MISO: pin 12
-// SCK:  pin 13
 
 // WinBond flash commands
 #define WB_WRITE_ENABLE       0x06
@@ -15,118 +12,6 @@
 #define WB_READ_DATA          0x03
 #define WB_PAGE_PROGRAM       0x02
 #define WB_JEDEC_ID           0x9f
-
-/*
-================================================================================
-Low-Level Device Routines
-The functions below perform the lowest-level interactions with the flash device.
-They match the timing diagrams of the datahsheet. They are called by wrapper 
-functions which provide a little more feedback to the user. I made them stand-
-alone functions so they can be re-used. Each function corresponds to a flash
-instruction opcode.
-================================================================================
-*/
-
-/* 
- * not_busy() polls the status bit of the device until it
- * completes the current operation. Most operations finish
- * in a few hundred microseconds or less, but chip erase 
- * may take 500+ms. Finish all operations with this poll.
- *
- * See section 9.2.8 of the datasheet
- */
-void not_busy(void) {
-  digitalWrite(6, HIGH);  
-  digitalWrite(6, LOW);
-  SPI.transfer(WB_READ_STATUS_REG_1);       
-  while (SPI.transfer(0) & 1) {}; 
-  digitalWrite(6, HIGH);  
-}
-
-/*
- * See the timing diagram in section 9.2.35 of the
- * data sheet, "Read JEDEC ID (9Fh)".
- */
-void _get_jedec_id(byte *b1, byte *b2, byte *b3) {
-    
-    digitalWrite(6, HIGH);
-    digitalWrite(6, LOW);
-    SPI.transfer(WB_JEDEC_ID);
-    *b1 = SPI.transfer(0); // manufacturer id
-    *b2 = SPI.transfer(0); // memory type
-    *b3 = SPI.transfer(0); // capacity
-    digitalWrite(6, HIGH);
-}  
-
-/*
- * See the timing diagram in section 9.2.26 of the
- * data sheet, "Chip Erase (C7h / 06h)". (Note:
- * either opcode works.)
- */
-void _chip_erase(void) {
-  digitalWrite(6, HIGH);
-  digitalWrite(6, LOW);  
-  SPI.transfer(WB_WRITE_ENABLE);
-  digitalWrite(6, HIGH);
-  digitalWrite(6, LOW);  
-  SPI.transfer(WB_CHIP_ERASE);
-  digitalWrite(6, HIGH);
-  /* See notes on rev 2 
-  digitalWrite(6, LOW);  
-  SPI.transfer(WB_WRITE_DISABLE);
-  digitalWrite(6, HIGH);
-  */
-  not_busy();
-}
-
-/*
- * See the timing diagram in section 9.2.10 of the
- * data sheet, "Read Data (03h)".
- */
-void _read_page(word page_number, byte *page_buffer) {
-  digitalWrite(6, HIGH);
-  digitalWrite(6, LOW);
-  SPI.transfer(WB_READ_DATA);
-  // Construct the 24-bit address from the 16-bit page
-  // number and 0x00, since we will read 256 bytes (one
-  // page).
-  SPI.transfer((page_number >> 8) & 0xFF);
-  SPI.transfer((page_number >> 0) & 0xFF);
-  SPI.transfer(0);
-  for (int i = 0; i < 256; ++i) {
-    page_buffer[i] = SPI.transfer(0);
-  }
-  digitalWrite(6, HIGH);
-  not_busy();
-}
- 
-/*
- * See the timing diagram in section 9.2.21 of the
- * data sheet, "Page Program (02h)".
- */
-void _write_page(word page_number, byte *page_buffer) {
-  digitalWrite(6, HIGH);
-  digitalWrite(6, LOW);  
-  SPI.transfer(WB_WRITE_ENABLE);
-  digitalWrite(6, HIGH);
-  digitalWrite(6, LOW);  
-  SPI.transfer(WB_PAGE_PROGRAM);
-  SPI.transfer((page_number >>  8) & 0xFF);
-  SPI.transfer((page_number >>  0) & 0xFF);
-  SPI.transfer(0);
-  for (int i = 0; i < 256; ++i) {
-    SPI.transfer(page_buffer[i]);
-  }
-  digitalWrite(6, HIGH);
-  /* See notes on rev 2
-  digitalWrite(6, LOW);  
-  SPI.transfer(WB_WRITE_DISABLE);
-  digitalWrite(6, HIGH);
-  */
-  not_busy();
-}
-
-// my code 
 
 int flash_send_byte(uint8_t data) {
 	return spi_write_blocking(spi0, &data, 1);
